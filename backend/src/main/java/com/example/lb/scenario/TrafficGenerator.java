@@ -52,6 +52,7 @@ public class TrafficGenerator implements AutoCloseable {
     private volatile long burstTargetRate;
     private volatile long burstEndsAtMillis;
     private volatile double currentRate;
+    private volatile boolean closed;
     private volatile ScheduledFuture<?> schedule;
 
     public TrafficGenerator(LoadBalancer loadBalancer, ScheduledExecutorService scheduler) {
@@ -66,21 +67,26 @@ public class TrafficGenerator implements AutoCloseable {
     }
 
     /**
-     * Schedules the tick every {@link #TICK_INTERVAL_MS} milliseconds, unless a
-     * schedule already exists. A generator without a scheduler still works: it
-     * simply relies on someone calling {@link #tick()}.
+     * Schedules the tick every {@link #TICK_INTERVAL_MS} milliseconds.
+     *
+     * <p>Synchronized, so two concurrent callers cannot both pass the "not
+     * started yet" check and end up with two schedules. Does nothing when there
+     * is no scheduler, when a schedule already exists, or after {@link #close()}
+     * — the last matters because a shut-down scheduler would throw
+     * {@link java.util.concurrent.RejectedExecutionException}.
      */
-    public void start() {
-        if (scheduler == null || schedule != null) {
+    public synchronized void start() {
+        if (closed || scheduler == null || schedule != null) {
             return;
         }
         schedule = scheduler.scheduleWithFixedDelay(
                 this::tick, TICK_INTERVAL_MS, TICK_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
-    /** Cancels the schedule and shuts the scheduler down. */
+    /** Cancels the schedule and shuts the scheduler down. Idempotent. */
     @Override
     public void close() {
+        closed = true;
         ScheduledFuture<?> pending = schedule;
         schedule = null;
         if (pending != null) {
@@ -159,7 +165,15 @@ public class TrafficGenerator implements AutoCloseable {
         burstEndsAtMillis = 0;
     }
 
-    /** Whether a burst rate is currently in effect, expired or not. */
+    /**
+     * Whether a burst rate is currently in effect.
+     *
+     * <p>A burst with a duration only stops counting once {@link #tick()} notices
+     * the deadline has passed, so this can still report {@code true} for up to
+     * one {@link #TICK_INTERVAL_MS} after the duration has run out. A
+     * zero-duration burst is never expired this way; only {@link #stopBurst()}
+     * ends it.
+     */
     public boolean isBursting() {
         return burstTargetRate > 0;
     }

@@ -16,6 +16,7 @@ import com.example.lb.metrics.MetricsCollector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -123,6 +124,52 @@ class TrafficGeneratorTest {
         converge(generator, 50);
         assertTrue(Math.abs(generator.currentRate() - 50) <= CONVERGENCE_TOLERANCE,
                 "the rate eased back down, but was " + generator.currentRate());
+    }
+
+    @Test
+    void aZeroDurationBurstPersistsUntilStopped() {
+        generator.setTargetRate(50);
+        converge(generator, 50);
+
+        // Duration 0 means "no deadline": the burst must never expire on its own.
+        generator.setBurst(200, 0L);
+        assertTrue(generator.isBursting(), "the burst is active right after it is set");
+        assertEquals(200L, generator.targetRate(), "the burst rate is the effective target");
+
+        // Push the clock far past any deadline a finite burst would have had, and
+        // tick repeatedly: an expiring burst would have reverted by now.
+        clock.advance(Duration.ofHours(24).toMillis());
+        for (int i = 0; i < 25; i++) {
+            generator.tick();
+        }
+
+        assertTrue(generator.isBursting(), "a zero-duration burst never expires on its own");
+        assertEquals(200L, generator.targetRate(), "the burst rate is still the effective target");
+        converge(generator, 200);
+        assertTrue(Math.abs(generator.currentRate() - 200) <= CONVERGENCE_TOLERANCE,
+                "the rate stayed at the burst rate, but was " + generator.currentRate());
+
+        generator.stopBurst();
+
+        assertFalse(generator.isBursting(), "stopBurst ends the burst");
+        assertEquals(50L, generator.targetRate(), "the base rate is the effective target again");
+        converge(generator, 50);
+        assertTrue(Math.abs(generator.currentRate() - 50) <= CONVERGENCE_TOLERANCE,
+                "the rate eased back down, but was " + generator.currentRate());
+    }
+
+    @Test
+    void rejectsInvalidBurstArguments() {
+        assertThrows(IllegalArgumentException.class, () -> generator.setBurst(-1, 0L));
+        assertThrows(IllegalArgumentException.class, () -> generator.setBurst(0, 0L));
+        assertThrows(IllegalArgumentException.class, () -> generator.setBurst(-200, 1_000L));
+        assertThrows(IllegalArgumentException.class, () -> generator.setBurst(200, -1L));
+
+        // A rejected call leaves the generator exactly as it was.
+        generator.setTargetRate(50);
+        assertThrows(IllegalArgumentException.class, () -> generator.setBurst(200, -1L));
+        assertFalse(generator.isBursting(), "a rejected burst did not start one");
+        assertEquals(50L, generator.targetRate(), "a rejected burst did not change the target");
     }
 
     @Test
