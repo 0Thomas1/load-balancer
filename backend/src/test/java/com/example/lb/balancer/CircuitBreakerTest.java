@@ -96,6 +96,63 @@ class CircuitBreakerTest {
     }
 
     @Test
+    void successWhileOpenClosesTheCircuit() {
+        openB1();
+        assertFalse(breaker.allowRequest("b1"));
+
+        // Fail-toward-availability: a success arriving from a request that was
+        // already in flight when the circuit tripped closes it, rather than
+        // being ignored. Note this intentionally overlaps with reset() -- the
+        // two paths are identical today, and this test is the canary that
+        // breaks if they ever diverge.
+        breaker.onSuccess("b1");
+
+        assertEquals(CircuitState.CLOSED, breaker.state("b1"));
+        assertFalse(breaker.isOpen("b1"));
+        assertTrue(breaker.allowRequest("b1"));
+
+        // The failure counter is cleared as well, so a full threshold of
+        // failures is needed before the circuit trips again.
+        breaker.onFailure("b1");
+        breaker.onFailure("b1");
+        assertEquals(CircuitState.CLOSED, breaker.state("b1"));
+        breaker.onFailure("b1");
+        assertEquals(CircuitState.OPEN, breaker.state("b1"));
+    }
+
+    @Test
+    void failureWhileOpenIsANoOpAndDoesNotRearmTheResetTimeout() {
+        // A longer timeout than the suite default, so that "armed when the
+        // circuit opened" and "re-armed by the last failure while open" yield
+        // two distinguishable deadlines (200ms apart in this scenario).
+        final long timeoutMs = 200;
+        CircuitBreaker slow = new CircuitBreaker(FAILURE_THRESHOLD, timeoutMs, clock);
+
+        for (int i = 0; i < FAILURE_THRESHOLD; i++) {
+            slow.onFailure("b1");
+        }
+        final long openedAt = clock.getAsLong();
+        assertEquals(CircuitState.OPEN, slow.state("b1"));
+
+        // More failures land while the circuit is open -- requests that were
+        // already in flight when it tripped. They must not re-arm the timeout,
+        // and must not touch the consecutive-failure count either.
+        clock.advance(150);
+        slow.onFailure("b1");
+        slow.onFailure("b1");
+        assertEquals(CircuitState.OPEN, slow.state("b1"));
+
+        // Probe a moment past the deadline measured from the OPEN transition...
+        clock.advance(60);
+        assertTrue(openedAt + timeoutMs <= clock.getAsLong(), "sanity: past the timeout since OPEN");
+        assertTrue(clock.getAsLong() < openedAt + 150 + timeoutMs,
+                "sanity: still short of the deadline re-arming at the last failure would imply");
+        assertEquals(CircuitState.HALF_OPEN, slow.state("b1"),
+                "the reset timeout is measured from the OPEN transition, not from the last failure while open");
+        assertTrue(slow.allowRequest("b1"));
+    }
+
+    @Test
     void unknownBackendIdBehavesLikeAClosedCircuit() {
         assertEquals(CircuitState.CLOSED, breaker.state("ghost"));
         assertFalse(breaker.isOpen("ghost"));

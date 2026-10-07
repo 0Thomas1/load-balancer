@@ -68,6 +68,12 @@ public class CircuitBreaker {
                 circuit.state = HALF_OPEN;
             }
             if (circuit.probeInFlight) {
+                // Edge case: a half-open probe whose outcome never arrives
+                // (client hung, connection dropped without an error) leaves
+                // probeInFlight stuck true and the backend stays half-open with
+                // no further probes admitted. Callers are responsible for always
+                // reporting a terminal outcome for an admitted probe; if they
+                // cannot guarantee that, reset(id) is the manual escape hatch.
                 return false;
             }
             circuit.probeInFlight = true;
@@ -101,12 +107,7 @@ public class CircuitBreaker {
      * and clears the failure count.
      */
     public void onSuccess(String backendId) {
-        BackendCircuit circuit = circuitFor(backendId);
-        synchronized (circuit) {
-            circuit.consecutiveFailures = 0;
-            circuit.probeInFlight = false;
-            circuit.state = CLOSED;
-        }
+        close(circuitFor(backendId));
     }
 
     /** Records a failed request: opens the circuit at the threshold, or re-opens it from half-open. */
@@ -129,7 +130,10 @@ public class CircuitBreaker {
 
     /** Forces the backend's circuit closed and forgets any recorded failures. */
     public void reset(String backendId) {
-        BackendCircuit circuit = circuitFor(backendId);
+        close(circuitFor(backendId));
+    }
+
+    private void close(BackendCircuit circuit) {
         synchronized (circuit) {
             circuit.consecutiveFailures = 0;
             circuit.probeInFlight = false;
