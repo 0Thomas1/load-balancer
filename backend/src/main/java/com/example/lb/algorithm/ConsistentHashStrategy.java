@@ -7,7 +7,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -49,7 +48,7 @@ public class ConsistentHashStrategy implements AlgorithmStrategy {
     }
 
     /** Builds the ring, ordered clockwise by hash point. */
-    private List<Point> ring(List<Backend> candidates, MessageDigest digest) {
+    private static List<Point> ring(List<Backend> candidates, MessageDigest digest) {
         List<Point> ring = new ArrayList<>(candidates.size() * VIRTUAL_NODES);
         for (Backend candidate : candidates) {
             for (int i = 0; i < VIRTUAL_NODES; i++) {
@@ -58,7 +57,7 @@ public class ConsistentHashStrategy implements AlgorithmStrategy {
         }
         // Stable sort: ties between colliding points resolve in candidate order.
         ring.sort(Comparator.comparingInt(Point::hash));
-        return Collections.unmodifiableList(ring);
+        return ring;
     }
 
     /** Reduces a possibly missing or padded IP to a stable hash input. */
