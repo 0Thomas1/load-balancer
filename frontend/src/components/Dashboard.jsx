@@ -6,12 +6,14 @@ import { RequestFlowViz } from './RequestFlowViz'
 import { ScenarioPanel } from './ScenarioPanel'
 import { AlgorithmSelector } from './AlgorithmSelector'
 import { BackendConfigPanel } from './BackendConfigPanel'
+import { Toast } from './Toast'
 
 const MAX_HISTORY = 60
 
 export default function Dashboard() {
   const { snapshot, events, connectionState } = useMetrics()
   const [history, setHistory] = useState([])
+  const [error, setError] = useState(null)
   const prevSnapshot = useRef(null)
 
   useEffect(() => {
@@ -92,16 +94,18 @@ export default function Dashboard() {
         <h2 className="mb-3 text-lg font-semibold">Controls</h2>
         <div className="grid gap-6 md:grid-cols-3">
           <div>
-            <AlgorithmSelector />
+            <AlgorithmSelector onError={setError} />
           </div>
           <div>
-            <ScenarioPanel />
+            <ScenarioPanel onError={setError} />
           </div>
           <div>
-            <BackendConfigPanel />
+            <BackendConfigPanel onError={setError} />
           </div>
         </div>
       </section>
+
+      <Toast message={error} onClose={() => setError(null)} />
     </div>
   )
 }

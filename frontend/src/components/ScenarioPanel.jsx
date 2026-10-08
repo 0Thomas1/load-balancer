@@ -1,29 +1,46 @@
 import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 
-export function ScenarioPanel() {
+export function ScenarioPanel({ onError }) {
   const [scenarios, setScenarios] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.getScenarios().then(setScenarios).finally(() => setLoading(false))
-  }, [])
+    api.getScenarios()
+      .then(setScenarios)
+      .catch((err) => onError?.(err.message))
+      .finally(() => setLoading(false))
+  }, [onError])
 
-  const refresh = () => api.getScenarios().then(setScenarios)
+  const refresh = () => {
+    api.getScenarios().then(setScenarios).catch((err) => onError?.(err.message))
+  }
 
   const handleStart = async (name) => {
-    await api.startScenario(name, {})
-    refresh()
+    try {
+      await api.startScenario(name, {})
+      refresh()
+    } catch (err) {
+      onError?.(err.message)
+    }
   }
 
   const handleStop = async (name) => {
-    await api.stopScenario(name)
-    refresh()
+    try {
+      await api.stopScenario(name)
+      refresh()
+    } catch (err) {
+      onError?.(err.message)
+    }
   }
 
   const handleStopAll = async () => {
     for (const s of scenarios.filter((s) => s.active)) {
-      await api.stopScenario(s.name)
+      try {
+        await api.stopScenario(s.name)
+      } catch (err) {
+        onError?.(err.message)
+      }
     }
     refresh()
   }
@@ -35,6 +52,7 @@ export function ScenarioPanel() {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-300">Scenarios</h3>
         <button
+          type="button"
           onClick={handleStopAll}
           className="rounded bg-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-600"
         >
@@ -49,6 +67,7 @@ export function ScenarioPanel() {
           </div>
           {s.active ? (
             <button
+              type="button"
               onClick={() => handleStop(s.name)}
               aria-label={`Stop ${s.name}`}
               className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-500"
@@ -57,6 +76,7 @@ export function ScenarioPanel() {
             </button>
           ) : (
             <button
+              type="button"
               onClick={() => handleStart(s.name)}
               aria-label={`Start ${s.name}`}
               className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-500"

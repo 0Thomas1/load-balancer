@@ -1,15 +1,29 @@
 import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 
-export function BackendConfigPanel() {
+export function BackendConfigPanel({ onError }) {
   const [backends, setBackends] = useState([])
   const [name, setName] = useState('')
   const [latency, setLatency] = useState('')
+  const [editingId, setEditingId] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.getBackends().then(setBackends)
-  }, [])
+    api.getBackends().then(setBackends).catch((err) => onError?.(err.message))
+  }, [onError])
+
+  const resetForm = () => {
+    setName('')
+    setLatency('')
+    setEditingId(null)
+  }
+
+  const startEdit = (b) => {
+    setEditingId(b.id)
+    setName(b.name)
+    setLatency(b.avgLatency != null ? String(b.avgLatency) : '')
+    setError('')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -24,15 +38,24 @@ export function BackendConfigPanel() {
     const data = { name }
     if (latency !== '') data.latencyMs = lat
 
-    await api.createBackend(data)
-    setName('')
-    setLatency('')
-    setBackends(await api.getBackends())
+    try {
+      if (editingId) await api.updateBackendConfig(editingId, data)
+      else await api.createBackend(data)
+      resetForm()
+      setBackends(await api.getBackends())
+    } catch (err) {
+      onError?.(err.message)
+    }
   }
 
   const handleDelete = async (id) => {
-    await api.deleteBackend(id)
-    setBackends(await api.getBackends())
+    try {
+      await api.deleteBackend(id)
+      if (editingId === id) resetForm()
+      setBackends(await api.getBackends())
+    } catch (err) {
+      onError?.(err.message)
+    }
   }
 
   return (
@@ -59,8 +82,17 @@ export function BackendConfigPanel() {
             className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100"
           />
           <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-500">
-            Add Backend
+            {editingId ? 'Update Backend' : 'Add Backend'}
           </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded bg-slate-700 px-3 py-1 text-sm text-slate-200 hover:bg-slate-600"
+            >
+              Cancel
+            </button>
+          )}
         </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
       </form>
@@ -69,12 +101,22 @@ export function BackendConfigPanel() {
         {backends.map((b) => (
           <div key={b.id} className="flex items-center justify-between rounded border border-slate-700 px-3 py-2 text-sm">
             <span>{b.name} <span className="text-slate-400">({b.id})</span></span>
-            <button
-              onClick={() => handleDelete(b.id)}
-              className="rounded bg-red-600 px-2 py-0.5 text-xs text-white hover:bg-red-500"
-            >
-              Remove
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => startEdit(b)}
+                className="rounded bg-slate-600 px-2 py-0.5 text-xs text-white hover:bg-slate-500"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(b.id)}
+                className="rounded bg-red-600 px-2 py-0.5 text-xs text-white hover:bg-red-500"
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))}
       </div>

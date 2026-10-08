@@ -1,21 +1,27 @@
 import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 
-export function AlgorithmSelector() {
+export function AlgorithmSelector({ onError }) {
   const [algorithms, setAlgorithms] = useState([])
   const [current, setCurrent] = useState('')
 
   useEffect(() => {
-    api.getAlgorithms().then((list) => {
-      setAlgorithms(list)
-      if (list.length > 0) setCurrent(list[0])
-    })
-  }, [])
+    api.getAlgorithms()
+      .then((list) => {
+        setAlgorithms(list)
+        if (list.length > 0) setCurrent(list[0])
+      })
+      .catch((err) => onError?.(err.message))
+  }, [onError])
 
   const handleChange = async (e) => {
     const name = e.target.value
     setCurrent(name)
-    await api.setAlgorithm(name)
+    try {
+      await api.setAlgorithm(name)
+    } catch (err) {
+      onError?.(err.message)
+    }
   }
 
   return (
