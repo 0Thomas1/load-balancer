@@ -1,7 +1,7 @@
-import { useMetrics } from './useMetrics'
+import { useMetrics } from './hooks/useMetrics'
 
 export default function App() {
-  const { connected } = useMetrics()
+  const { connectionState } = useMetrics()
 
   return (
     <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
@@ -23,7 +23,7 @@ export default function App() {
       </div>
 
       <p className="mt-8 text-sm text-slate-500">
-        {connected ? 'Connected' : 'Disconnected'}
+        {connectionState === 'connected' ? 'Connected' : 'Disconnected'}
       </p>
     </main>
   )

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-vi.mock('./useMetrics', () => ({
-  useMetrics: () => ({ snapshot: null, connected: false }),
+vi.mock('./hooks/useMetrics', () => ({
+  useMetrics: () => ({ snapshot: null, events: [], connectionState: 'disconnected', error: null, reconnect: () => {} }),
 }))
 
 import App from './App'
