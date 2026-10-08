@@ -17,9 +17,11 @@ import com.example.lb.scenario.ScenarioEngine;
 import com.example.lb.scenario.SlowBackendScenario;
 import com.example.lb.scenario.TrafficGenerator;
 import com.example.lb.scenario.TrafficSpikeScenario;
+import com.example.lb.ws.MetricsWebSocketHandler;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 import java.util.List;
 import java.util.Map;
@@ -92,8 +94,15 @@ public class BalancerConfig {
 
     @Bean
     public TrafficGenerator trafficGenerator(LoadBalancer loadBalancer,
-                                             @Qualifier("trafficScheduler") ScheduledExecutorService scheduler) {
-        return new TrafficGenerator(loadBalancer, scheduler);
+                                             @Qualifier("trafficScheduler") ScheduledExecutorService scheduler,
+                                             @Lazy MetricsWebSocketHandler metricsHandler) {
+        TrafficGenerator generator = new TrafficGenerator(loadBalancer, scheduler);
+        // The dashboard's event stream is fed straight from the generator, so
+        // the handler learns about every request as it is served. The injection
+        // is lazy because the handler reads the scenario engine, which the
+        // spike scenario drags the generator back into.
+        generator.addListener(metricsHandler);
+        return generator;
     }
 
     @Bean
