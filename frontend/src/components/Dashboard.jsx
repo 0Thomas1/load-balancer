@@ -30,6 +30,7 @@ export default function Dashboard() {
   const backends = snapshot?.backends || []
   const healthyBackends = backends.filter((b) => b.status === 'UP')
   const allDown = backends.length > 0 && healthyBackends.length === 0
+  const downCount = backends.filter((b) => b.status === 'DOWN').length
 
   return (
     <div className="space-y-6">
@@ -97,7 +98,7 @@ export default function Dashboard() {
             <AlgorithmSelector onError={setError} />
           </div>
           <div>
-            <ScenarioPanel onError={setError} />
+            <ScenarioPanel onError={setError} downCount={downCount} />
           </div>
           <div>
             <BackendConfigPanel onError={setError} />

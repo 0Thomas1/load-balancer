@@ -6,6 +6,7 @@ import com.example.lb.backend.BackendPool;
 import com.example.lb.backend.BackendStatus;
 import com.example.lb.backend.CircuitState;
 import com.example.lb.balancer.CircuitBreaker;
+import com.example.lb.scenario.exceptions.ScenarioPreconditionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -54,7 +55,7 @@ class BackendRecoveryScenarioTest {
     @Test
     void applyWithNoDownBackendFails() {
         assertThatThrownBy(scenario::apply)
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ScenarioPreconditionException.class)
                 .hasMessageContaining("no backend is DOWN");
     }
 

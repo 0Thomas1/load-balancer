@@ -3,6 +3,7 @@ package com.example.lb.scenario;
 import com.example.lb.backend.Backend;
 import com.example.lb.backend.BackendPool;
 import com.example.lb.balancer.CircuitBreaker;
+import com.example.lb.scenario.exceptions.ScenarioPreconditionException;
 
 import java.util.List;
 import java.util.Objects;
@@ -61,7 +62,7 @@ public class BackendRecoveryScenario implements Scenario {
                 .filter(backend -> backend.status() == DOWN)
                 .toList();
         if (downed.isEmpty()) {
-            throw new IllegalStateException("no backend is DOWN");
+            throw new ScenarioPreconditionException("no backend is DOWN");
         }
         Backend recovered = downed.get(random.nextInt(downed.size()));
         recovered.setStatus(UP);

@@ -93,6 +93,18 @@ describe('ScenarioPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /start consumer-drop/i }))
     await waitFor(() => expect(onError).toHaveBeenCalledWith('scenario failed'))
   })
+
+  it('disables Start for backend-recovery while no backend is DOWN', async () => {
+    render(<ScenarioPanel downCount={0} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /start backend-recovery/i })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /start backend-recovery/i })).toBeDisabled()
+  })
+
+  it('enables Start for backend-recovery once a backend is DOWN', async () => {
+    render(<ScenarioPanel downCount={1} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /start backend-recovery/i })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /start backend-recovery/i })).toBeEnabled()
+  })
 })
 
 describe('AlgorithmSelector', () => {

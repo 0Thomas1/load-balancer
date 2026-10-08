@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 
-export function ScenarioPanel({ onError }) {
+export function ScenarioPanel({ onError, downCount = 0 }) {
   const [scenarios, setScenarios] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -45,6 +45,11 @@ export function ScenarioPanel({ onError }) {
     refresh()
   }
 
+  // Starting recovery requires at least one DOWN backend; the backend refuses
+  // otherwise (409 ScenarioPreconditionException), so keep the dead click from
+  // ever being offered.
+  const recoveryBlocked = (name) => name === 'backend-recovery' && downCount === 0
+
   if (loading) return <p className="text-sm text-slate-500">Loading scenarios…</p>
 
   return (
@@ -78,8 +83,14 @@ export function ScenarioPanel({ onError }) {
             <button
               type="button"
               onClick={() => handleStart(s.name)}
+              disabled={recoveryBlocked(s.name)}
               aria-label={`Start ${s.name}`}
-              className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-500"
+              title={recoveryBlocked(s.name) ? 'Requires at least one backend DOWN' : undefined}
+              className={`rounded px-2 py-1 text-xs text-white ${
+                recoveryBlocked(s.name)
+                  ? 'cursor-not-allowed bg-slate-600 opacity-50'
+                  : 'bg-green-600 hover:bg-green-500'
+              }`}
             >
               Start
             </button>

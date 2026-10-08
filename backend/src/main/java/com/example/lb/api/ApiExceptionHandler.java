@@ -5,6 +5,7 @@ import com.example.lb.backend.exceptions.BackendNotFoundException;
 import com.example.lb.backend.exceptions.DuplicateBackendException;
 import com.example.lb.scenario.exceptions.ScenarioAlreadyActiveException;
 import com.example.lb.scenario.exceptions.ScenarioNotFoundException;
+import com.example.lb.scenario.exceptions.ScenarioPreconditionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -33,7 +34,7 @@ public class ApiExceptionHandler {
         return status(HttpStatus.NOT_FOUND, e);
     }
 
-    @ExceptionHandler({ScenarioAlreadyActiveException.class, DuplicateBackendException.class})
+    @ExceptionHandler({ScenarioAlreadyActiveException.class, DuplicateBackendException.class, ScenarioPreconditionException.class})
     public ResponseEntity<ApiError> conflict(RuntimeException e) {
         return status(HttpStatus.CONFLICT, e);
     }

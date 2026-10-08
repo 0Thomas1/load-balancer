@@ -273,6 +273,16 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void startingRecoveryWhenNothingIsDownIsReportedAsAConflict() throws Exception {
+        // All four seeded backends are UP at baseline, so recovery has nothing
+        // to do. The client must be able to show the reason (4xx + message),
+        // not a bare 500 the user can't act on.
+        mockMvc.perform(post("/api/scenarios/backend-recovery"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", containsString("no backend is DOWN")));
+    }
+
+    @Test
     void setsTheTrafficRate() throws Exception {
         mockMvc.perform(put("/api/traffic")
                         .contentType(MediaType.APPLICATION_JSON)
