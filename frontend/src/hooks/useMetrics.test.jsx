@@ -161,6 +161,45 @@ describe('useMetrics', () => {
     expect(MockWebSocket.instances.length).toBeGreaterThan(5)
   })
 
+  it('reconnects when an open socket silently stops delivering', () => {
+    const { result } = renderHook(() => useMetrics())
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen()
+    })
+    expect(result.current.connectionState).toBe('connected')
+
+    // One watchdog tick: still inside the 5s silence budget.
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+
+    // No message ever arrives and no close event fires, yet the socket claims
+    // to be open. The watchdog must treat it as dead and reconnect.
+    act(() => {
+      vi.advanceTimersByTime(6000)
+    })
+    expect(MockWebSocket.instances).toHaveLength(2)
+  })
+
+  it('does not reconnect while messages keep flowing', () => {
+    const { result } = renderHook(() => useMetrics())
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen()
+    })
+    for (let i = 0; i < 12; i++) {
+      act(() => {
+        vi.advanceTimersByTime(1000)
+        MockWebSocket.instances[0].simulateMessage({
+          type: 'snapshot',
+          payload: { timestamp: i },
+        })
+      })
+    }
+    expect(MockWebSocket.instances).toHaveLength(1)
+    expect(result.current.connectionState).toBe('connected')
+  })
+
   it('keeps only the last 50 events', () => {
     const { result } = renderHook(() => useMetrics())
     act(() => {

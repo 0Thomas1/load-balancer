@@ -174,6 +174,54 @@ class MetricsWebSocketHandlerTest {
         assertThat(message.path("payload").path("backendId").asText()).isIn("b1", "b2");
     }
 
+    @Test
+    void aSessionThatIsNoLongerOpenIsRemovedInsteadOfSkipped() throws Exception {
+        StubSession session = connect();
+        session.open = false;
+
+        handler.broadcastCurrentSnapshot();
+
+        assertThat(handler.sessionCount()).isZero();
+    }
+
+    @Test
+    void aSessionDroppedForASendFailureIsClosedSoTheClientSeesIt() throws Exception {
+        StubSession session = connect();
+        session.failOnSend = true;
+
+        handler.broadcastCurrentSnapshot();
+
+        assertThat(handler.sessionCount()).isZero();
+        assertThat(session.closeInvoked).isTrue();
+    }
+
+    @Test
+    void concurrentSendersDoNotDropTheSession() throws Exception {
+        StubSession session = connect();
+
+        // Mirrors production: the generator thread publishes events while the
+        // snapshot thread broadcasts snapshots, both writing to the same socket.
+        Thread snapshotThread = new Thread(() -> {
+            for (int i = 0; i < 500; i++) {
+                handler.broadcastCurrentSnapshot();
+            }
+        });
+        Thread eventThread = new Thread(() -> {
+            for (int i = 0; i < 500; i++) {
+                handler.onRequest(new RequestEvent("10.0.0.7", "b2", true, 1_000_000L, FailureReason.NONE));
+            }
+        });
+
+        snapshotThread.start();
+        eventThread.start();
+        snapshotThread.join();
+        eventThread.join();
+
+        assertThat(handler.sessionCount()).isEqualTo(1);
+        assertThat(session.sendAttempts).isEqualTo(1000);
+        assertThat(session.sent()).hasSize(1000);
+    }
+
     private StubSession connect() throws Exception {
         StubSession session = new StubSession();
         handler.afterConnectionEstablished(session);
@@ -199,8 +247,12 @@ class MetricsWebSocketHandlerTest {
     private static final class StubSession implements WebSocketSession {
 
         private final List<TextMessage> sent = Collections.synchronizedList(new ArrayList<>());
-        private int sendAttempts;
+        private final Object sendGate = new Object();
+        private volatile int sendAttempts;
+        private volatile boolean inSend;
         private boolean failOnSend;
+        private volatile boolean open = true;
+        private boolean closeInvoked;
 
         List<TextMessage> sent() {
             return List.copyOf(sent);
@@ -213,12 +265,33 @@ class MetricsWebSocketHandlerTest {
                 // How Spring itself reports a socket that has already closed.
                 throw new IllegalStateException("WebSocket session is closed");
             }
-            sent.add((TextMessage) message);
+            synchronized (sendGate) {
+                if (inSend) {
+                    // A second thread writing to the same endpoint while the
+                    // first is mid-frame — exactly the TEXT_PARTIAL_WRITING
+                    // error Tomcat's endpoint state machine throws.
+                    throw new IllegalStateException("The remote endpoint was in state [TEXT_PARTIAL_WRITING]");
+                }
+                inSend = true;
+            }
+            try {
+                // Hold the "write" briefly so a concurrent sender on another
+                // thread is statistical to land while this one is in flight.
+                Thread.sleep(1);
+                sent.add((TextMessage) message);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            } finally {
+                synchronized (sendGate) {
+                    inSend = false;
+                }
+            }
         }
 
         @Override
         public boolean isOpen() {
-            return true;
+            return open;
         }
 
         @Override
@@ -288,12 +361,14 @@ class MetricsWebSocketHandlerTest {
 
         @Override
         public void close() {
-            throw new UnsupportedOperationException();
+            closeInvoked = true;
+            open = false;
         }
 
         @Override
         public void close(CloseStatus status) {
-            throw new UnsupportedOperationException();
+            closeInvoked = true;
+            open = false;
         }
     }
 }

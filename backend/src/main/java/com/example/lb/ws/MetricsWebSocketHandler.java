@@ -12,6 +12,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -45,15 +47,19 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Messages are sent to sessions from two threads at once, so the session list
  * is a {@link CopyOnWriteArrayList}: iteration is lock-free and a socket that
- * connects or drops mid-broadcast cannot disturb it. A socket that fails to
- * accept a message is dropped from the list, so one dead client cannot silence
- * the rest.
+ * connects or drops mid-broadcast cannot disturb it. Tomcat's endpoint rejects a
+ * send started while another is mid-frame, so writes to one socket are
+ * serialized per socket. A socket that goes away is closed and dropped from the
+ * list, so one dead client cannot silence the rest, and its browser gets a close
+ * event it can reconnect to instead of waiting on a socket that serves nothing.
  */
 @Component
 public class MetricsWebSocketHandler extends TextWebSocketHandler implements RequestEventListener {
 
     /** How often a fresh snapshot is pushed to every socket. */
     static final long SNAPSHOT_INTERVAL_MS = 500L;
+
+    private static final Logger log = LoggerFactory.getLogger(MetricsWebSocketHandler.class);
 
     private final ObjectMapper objectMapper;
     private final MetricsCollector metrics;
@@ -160,13 +166,31 @@ public class MetricsWebSocketHandler extends TextWebSocketHandler implements Req
         }
         for (WebSocketSession session : sessions) {
             if (!session.isOpen()) {
+                // Drop dead sockets instead of skipping them forever; a client
+                // that vanished without a clean handshake would otherwise stay
+                // in the list silently for the lifetime of the process.
+                sessions.remove(session);
                 continue;
             }
             try {
-                session.sendMessage(new TextMessage(json));
+                // The generator thread and the snapshot thread both write to
+                // every socket. Tomcat's endpoint state machine rejects a send
+                // that starts while another is mid-frame (TEXT_PARTIAL_WRITING),
+                // so writes to one socket are serialized per socket.
+                synchronized (session) {
+                    session.sendMessage(new TextMessage(json));
+                }
             } catch (IOException | RuntimeException e) {
-                // The socket went away between the check and the send; drop it
-                // so a stale session cannot fail every later broadcast too.
+                // The socket went away between the check and the send. Closing
+                // it means the client's onclose fires and its reconnect logic
+                // takes over, rather than the browser keeping a socket that
+                // serves nothing until the page is refreshed by hand.
+                try {
+                    session.close(CloseStatus.SERVER_ERROR);
+                } catch (IOException ignored) {
+                    // Already gone; removal below is all that is left to do.
+                }
+                log.warn("Dropping socket {} that failed to accept a broadcast: {}", session.getId(), e.toString());
                 sessions.remove(session);
             }
         }
