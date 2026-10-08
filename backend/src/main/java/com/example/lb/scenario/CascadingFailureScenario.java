@@ -37,6 +37,12 @@ import static com.example.lb.backend.BackendStatus.UP;
  * down for another reason is left alone, so a concurrent outage is not silently
  * undone.
  *
+ * <p>A {@code count} of zero is legal and drops nothing: it is the way to say
+ * "cascading failure is the selected scenario" without taking anything out of
+ * rotation, so {@link #apply()} on one is a no-op rather than a single drop.
+ * That matches the rest of the class, where having nothing to drop (an empty
+ * healthy set) is something to shrug at rather than fail over.
+ *
  * <p>The scenario takes no parameters: how many backends to drop and how long
  * between them are fixed when it is constructed, because a cascade whose pace is
  * decided by a hand-typed query parameter is not reproducible on the dashboard.
@@ -121,7 +127,11 @@ public class CascadingFailureScenario implements Scenario {
             applied = true;
             // The first drop is synchronous: by the time apply() returns the
             // cascade has visibly started, which is what a dashboard click wants.
-            dropOne();
+            // A count of zero asks for no cascade at all, so there is no first
+            // drop to make and apply does nothing beyond marking itself applied.
+            if (count > 0) {
+                dropOne();
+            }
             for (int i = 1; i < count; i++) {
                 pending.add(scheduler.schedule(this::dropOne, i * delayMs, TimeUnit.MILLISECONDS));
             }

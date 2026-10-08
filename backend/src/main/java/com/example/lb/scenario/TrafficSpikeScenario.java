@@ -40,7 +40,15 @@ public class TrafficSpikeScenario implements Scenario {
     private final TrafficGenerator generator;
     private final long defaultRate;
 
-    /** Whether a spike is currently in effect, so revert is a no-op without one. */
+    /**
+     * Whether a spike is currently in effect, so revert is a no-op without one.
+     *
+     * <p>The check-then-act around this flag is deliberately not synchronized:
+     * apply and revert are serialized by the REST layer above, so the only
+     * interleaving left to worry about would need two callers reaching the same
+     * scenario at once, which nothing does. The one thing that must not go stale
+     * is the flag itself, which is why it is volatile.
+     */
     private volatile boolean applied;
 
     public TrafficSpikeScenario(TrafficGenerator generator) {

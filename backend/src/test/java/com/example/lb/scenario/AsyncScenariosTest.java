@@ -296,6 +296,17 @@ class AsyncScenariosTest {
     }
 
     @Test
+    void aCountOfZeroDropsNothing() {
+        CascadingFailureScenario scenario = new CascadingFailureScenario(pool, scheduler, 0, CASCADE_DELAY_MS);
+
+        assertThatNoException().isThrownBy(scenario::apply);
+
+        assertStaysAtCountDown(0, 300L);
+        assertThatNoException().isThrownBy(scenario::revert);
+        assertThat(allUp()).isTrue();
+    }
+
+    @Test
     void negativeCountAndDelayAreRejected() {
         assertThatThrownBy(() -> new CascadingFailureScenario(pool, scheduler, -1, CASCADE_DELAY_MS))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -330,7 +341,8 @@ class AsyncScenariosTest {
             }
             sleep(POLL_INTERVAL_MS);
         }
-        assertThat(pool.healthy()).as("expected %d healthy backends within %d ms", expected, timeoutMs).isEmpty();
+        assertThat(pool.healthy().size()).as("expected %d healthy backends within %d ms", expected, timeoutMs)
+                .isEqualTo(expected);
     }
 
     /** Re-checks the pool across a window in which a cancelled drop would still have fired. */
