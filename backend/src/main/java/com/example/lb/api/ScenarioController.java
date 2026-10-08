@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /** Starts and stops the failure scenarios. */
 @RestController
@@ -33,8 +34,16 @@ public class ScenarioController {
     /** Applies a scenario; an unknown name is a 404, an already active one a 409. */
     @PostMapping("/{name}")
     public ScenarioInfo start(@PathVariable String name, @RequestBody(required = false) ScenarioStartRequest request) {
-        scenarioEngine.start(name, request == null ? null : request.params());
+        scenarioEngine.start(name, paramsOf(request));
         return infoOf(name);
+    }
+
+    /** No body and no {@code params} both mean "use the scenario's defaults". */
+    private static Map<String, String> paramsOf(ScenarioStartRequest request) {
+        if (request == null || request.params() == null) {
+            return Map.of();
+        }
+        return request.params();
     }
 
     @DeleteMapping("/{name}")

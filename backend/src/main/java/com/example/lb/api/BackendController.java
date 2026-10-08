@@ -73,8 +73,20 @@ public class BackendController {
         return name.trim();
     }
 
-    /** "My Backend" becomes {@code my-backend}: readable and stable across calls. */
+    /**
+     * "My Backend" becomes {@code my-backend}: readable and stable across calls.
+     *
+     * <p>Non-alphanumerics collapse to a single dash, so a name made only of
+     * punctuation would give a junk id like {@code "-"} rather than an empty
+     * one; that is rejected here as a bad request.
+     *
+     * @throws IllegalArgumentException when the name has no letter or digit in it
+     */
     private static String idFor(String name) {
-        return name.trim().toLowerCase().replaceAll("[^a-z0-9]+", "-");
+        String id = name.trim().toLowerCase().replaceAll("[^a-z0-9]+", "-");
+        if (id.replace("-", "").isEmpty()) {
+            throw new IllegalArgumentException("name must contain at least one letter or digit: " + name);
+        }
+        return id;
     }
 }

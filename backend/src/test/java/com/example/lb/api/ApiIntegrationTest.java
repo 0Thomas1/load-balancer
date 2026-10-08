@@ -4,13 +4,13 @@ import com.example.lb.backend.Backend;
 import com.example.lb.backend.BackendConfig;
 import com.example.lb.backend.BackendPool;
 import com.example.lb.backend.BackendStatus;
+import com.example.lb.balancer.LoadBalancer;
 import com.example.lb.scenario.ScenarioEngine;
+import com.example.lb.scenario.TrafficGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,14 +36,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * End-to-end coverage of the REST surface against the real bean wiring.
  *
  * <p>The demo runner is present but does not start any scheduled work, so the
- * seeded pool is exactly the four backends the assertions below expect. The
- * tests are ordered because they share that pool; {@link #resetDemoState()} puts
- * it back the way the runner seeded it after every test.
+ * seeded pool is exactly the four backends the assertions below expect.
+ *
+ * <p>The tests share one application context, so they also share the mutable
+ * beans: the pool, the active algorithm and the traffic rate. There is no
+ * {@code @Order} on purpose — {@link #assertBaseline()} runs before every test
+ * and fails loudly if anything leaked out of a previous one, and
+ * {@link #restoreBaseline()} puts every one of those back. That makes each test
+ * correct on its own, so the class passes in whatever order JUnit picks.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "app.demo.autoStartTraffic=false")
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ApiIntegrationTest {
 
     @Autowired
@@ -56,12 +60,40 @@ class ApiIntegrationTest {
     private BackendPool pool;
 
     @Autowired
+    private LoadBalancer loadBalancer;
+
+    @Autowired
+    private TrafficGenerator generator;
+
+    @Autowired
     private ScenarioEngine scenarioEngine;
 
     private static final List<String> SEEDED_IDS = List.of("b1", "b2", "b3", "b4");
 
+    /**
+     * The algorithm the balancer boots on: {@code BalancerConfig} picks
+     * round-robin after the constructor's own deterministic default.
+     */
+    private static final String BASELINE_ALGORITHM = "round-robin";
+
+    /** The generator's own default target rate, which it never leaves without being told to. */
+    private static final long BASELINE_RATE = 20L;
+
+    /**
+     * Fails if a previous test left the shared beans somewhere else, which is
+     * what makes the class safe to run unordered.
+     */
+    @BeforeEach
+    void assertBaseline() {
+        assertThat(loadBalancer.getAlgorithmName()).isEqualTo(BASELINE_ALGORITHM);
+        assertThat(generator.targetRate()).isEqualTo(BASELINE_RATE);
+        assertThat(generator.isBursting()).isFalse();
+        assertThat(scenarioEngine.list()).allSatisfy(info -> assertThat(info.active()).isFalse());
+        assertThat(pool.all()).hasSize(SEEDED_IDS.size());
+    }
+
     @AfterEach
-    void resetDemoState() {
+    void restoreBaseline() {
         scenarioEngine.stopAll();
         pool.all().stream()
                 .map(Backend::id)
@@ -74,10 +106,14 @@ class ApiIntegrationTest {
                 backend.setStatus(BackendStatus.UP);
             });
         }
+        loadBalancer.setAlgorithm(BASELINE_ALGORITHM);
+        // A burst wins over the base rate, so it has to go first; setTargetRate
+        // rejects 0, which is why the baseline is the generator's own default.
+        generator.stopBurst();
+        generator.setTargetRate(BASELINE_RATE);
     }
 
     @Test
-    @Order(1)
     void listsTheSeededBackends() throws Exception {
         mockMvc.perform(get("/api/backends"))
                 .andExpect(status().isOk())
@@ -88,7 +124,6 @@ class ApiIntegrationTest {
     }
 
     @Test
-    @Order(2)
     void createsBackendsAndRejectsDuplicatesAndInvalidConfigs() throws Exception {
         mockMvc.perform(post("/api/backends")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -110,11 +145,17 @@ class ApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("latencyMs")));
 
+        // A name that slugs to nothing would create a backend with an empty id.
+        mockMvc.perform(post("/api/backends")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("name", "!!!"))))
+                .andExpect(status().isBadRequest());
+
         assertThat(pool.get("broken")).isEmpty();
+        assertThat(pool.get("-")).isEmpty();
     }
 
     @Test
-    @Order(3)
     void deletesBackends() throws Exception {
         mockMvc.perform(post("/api/backends")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -133,7 +174,6 @@ class ApiIntegrationTest {
     }
 
     @Test
-    @Order(4)
     void updatesBackendConfig() throws Exception {
         mockMvc.perform(put("/api/backends/b1/config")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -162,7 +202,6 @@ class ApiIntegrationTest {
     }
 
     @Test
-    @Order(5)
     void listsTheSixAlgorithms() throws Exception {
         mockMvc.perform(get("/api/algorithms"))
                 .andExpect(status().isOk())
@@ -173,7 +212,6 @@ class ApiIntegrationTest {
     }
 
     @Test
-    @Order(6)
     void switchesTheAlgorithm() throws Exception {
         mockMvc.perform(put("/api/algorithm")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -189,11 +227,20 @@ class ApiIntegrationTest {
     }
 
     @Test
-    @Order(7)
     void startsAndStopsScenarios() throws Exception {
         mockMvc.perform(get("/api/scenarios"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(8)));
+
+        // No body at all is the same as no params: the scenario uses its defaults.
+        mockMvc.perform(post("/api/scenarios/consumer-drop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("consumer-drop"))
+                .andExpect(jsonPath("$.active").value(true));
+
+        mockMvc.perform(delete("/api/scenarios/consumer-drop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
 
         mockMvc.perform(post("/api/scenarios/consumer-drop")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -226,7 +273,6 @@ class ApiIntegrationTest {
     }
 
     @Test
-    @Order(8)
     void setsTheTrafficRate() throws Exception {
         mockMvc.perform(put("/api/traffic")
                         .contentType(MediaType.APPLICATION_JSON)
