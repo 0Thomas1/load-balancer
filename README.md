@@ -46,7 +46,9 @@ make dev-backend      # backend now also serves the SPA on :8080
 ```
 
 Then open http://localhost:8080. `WebConfig` activates only when
-`frontend/dist` exists; otherwise the backend stays API-only for dev.
+`frontend/dist` exists; otherwise the backend stays API-only for dev. If you launch
+the packaged jar from a directory other than the repo root, point it at the build
+output with `--app.frontend-dist=/absolute/path/to/frontend/dist`.
 
 ## Tests
 
@@ -86,7 +88,7 @@ make test-frontend    # vitest run (frontend)
 | `consumer-drop` | Simulated consumers vanish; backends are dropped to DOWN | Backend status flips, requests re-distribute |
 | `traffic-spike` | Sudden burst of generated traffic | Throughput chart spikes |
 | `latency-injection` | Artificial response latency added | Per-backend latency climbs |
-| `network-partition` | Backends become unreachable | Backends fall DOWN, health checks fail |
+| `network-partition` | Backends are isolated by draining them out of rotation | Status flips to DRAINING, traffic stops flowing there |
 | `slow-backend` | One backend slows down | That backend's latency rises, load shifts away |
 | `circuit-breaker-trip` | Forces a circuit breaker OPEN | Circuit badge turns red, traffic stops going there |
 | `backend-recovery` | Brings a DOWN backend back UP | Backend returns, load re-balances |
