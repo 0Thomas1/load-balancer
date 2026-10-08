@@ -12,4 +12,12 @@ describe('App', () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Load Balancer Sandbox' })).toBeInTheDocument()
   })
+
+  it('renders the empty scaffold panels', () => {
+    render(<App />)
+    for (const name of ['Metrics', 'Backends', 'Scenarios', 'Traffic']) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    }
+    expect(screen.getByText('Disconnected')).toBeInTheDocument()
+  })
 })
