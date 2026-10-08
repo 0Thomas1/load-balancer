@@ -18,14 +18,15 @@ export function connectWebSocket(url, { onSnapshot, onEvent, onStatus } = {}) {
 
   function connect() {
     closedByUser = false
-    socket = new WebSocket(url)
+    const s = new WebSocket(url)
+    socket = s
 
-    socket.onopen = () => {
+    s.onopen = () => {
       attempt = 0
       onStatus?.('connected')
     }
 
-    socket.onmessage = (msg) => {
+    s.onmessage = (msg) => {
       try {
         const { type, payload } = JSON.parse(msg.data)
         if (type === 'snapshot') onSnapshot?.(payload)
@@ -35,16 +36,18 @@ export function connectWebSocket(url, { onSnapshot, onEvent, onStatus } = {}) {
       }
     }
 
-    socket.onclose = () => {
+    s.onclose = () => {
+      // reconnect() closes the old socket and opens a fresh one immediately;
+      // the old socket's onclose fires asynchronously AFTER the new socket
+      // exists. Ignore its close so it cannot schedule a duplicate reconnect.
+      if (closedByUser || s !== socket) return
       onStatus?.('reconnecting')
-      if (!closedByUser) {
-        const delay = Math.min(INITIAL_RECONNECT_DELAY * 2 ** attempt, MAX_RECONNECT_DELAY)
-        attempt++
-        timer = setTimeout(connect, delay)
-      }
+      const delay = Math.min(INITIAL_RECONNECT_DELAY * 2 ** attempt, MAX_RECONNECT_DELAY)
+      attempt++
+      timer = setTimeout(connect, delay)
     }
 
-    socket.onerror = () => {
+    s.onerror = () => {
       onStatus?.('error')
     }
   }

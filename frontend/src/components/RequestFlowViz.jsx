@@ -1,10 +1,24 @@
 import { useState, useEffect, useRef } from 'react'
 
 const DOT_LIFETIME_MS = 800
+const MAX_DOTS = 80
 
 export function RequestFlowViz({ events, backends }) {
   const [dots, setDots] = useState([])
   const nextId = useRef(0)
+  const timersRef = useRef(new Set())
+
+  // Removal timers intentionally live OUTSIDE the events-effect lifecycle:
+  // a live stream changes `events` faster than DOT_LIFETIME_MS, so any
+  // timer created inside that effect would be cleared by its cleanup before
+  // firing — dots would accumulate forever. They are cleared on unmount.
+  useEffect(() => {
+    const timers = timersRef.current
+    return () => {
+      timers.forEach(clearTimeout)
+      timers.clear()
+    }
+  }, [])
 
   useEffect(() => {
     if (!events || events.length === 0) return
@@ -12,13 +26,13 @@ export function RequestFlowViz({ events, backends }) {
     if (!latest.backendId) return
 
     const id = nextId.current++
-    setDots((prev) => [...prev, { id, backendId: latest.backendId, key: id }])
+    setDots((prev) => [...prev, { id, backendId: latest.backendId, key: id }].slice(-MAX_DOTS))
 
     const timer = setTimeout(() => {
+      timersRef.current.delete(timer)
       setDots((prev) => prev.filter((d) => d.id !== id))
     }, DOT_LIFETIME_MS)
-
-    return () => clearTimeout(timer)
+    timersRef.current.add(timer)
   }, [events])
 
   const backendNodes = backends || []

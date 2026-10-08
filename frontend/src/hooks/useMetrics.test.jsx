@@ -116,6 +116,32 @@ describe('useMetrics', () => {
     expect(MockWebSocket.instances).toHaveLength(4)
   })
 
+  it('does not spawn a duplicate socket when a stale socket closes after reconnect', () => {
+    const { result } = renderHook(() => useMetrics())
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen()
+    })
+    expect(result.current.connectionState).toBe('connected')
+
+    act(() => {
+      result.current.reconnect()
+    })
+    // reconnect() closes the old socket and opens a fresh one immediately
+    expect(MockWebSocket.instances).toHaveLength(2)
+
+    // In a real browser the OLD socket's onclose fires asynchronously, i.e.
+    // after the fresh socket already exists. It must not trigger a reconnect.
+    act(() => {
+      MockWebSocket.instances[0].simulateClose()
+    })
+    expect(result.current.connectionState).toBe('connected')
+
+    act(() => {
+      vi.advanceTimersByTime(8000)
+    })
+    expect(MockWebSocket.instances).toHaveLength(2)
+  })
+
   it('caps reconnect delay at 8 seconds', () => {
     const { result } = renderHook(() => useMetrics())
     act(() => {
@@ -149,7 +175,7 @@ describe('useMetrics', () => {
       })
     }
     expect(result.current.events).toHaveLength(50)
-    // First event should be the 10th (index 9), since we keep the LAST 50
+    // First kept event is the 11th (original index 10) — the last 50 of 60
     expect(result.current.events[0].latencyNanos).toBe(10)
     expect(result.current.events[49].latencyNanos).toBe(59)
   })
