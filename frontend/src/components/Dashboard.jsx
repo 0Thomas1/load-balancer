@@ -3,6 +3,9 @@ import { useMetrics } from '../hooks/useMetrics'
 import { TrafficChart } from './TrafficChart'
 import { BackendStatsGrid } from './BackendStatsGrid'
 import { RequestFlowViz } from './RequestFlowViz'
+import { ScenarioPanel } from './ScenarioPanel'
+import { AlgorithmSelector } from './AlgorithmSelector'
+import { BackendConfigPanel } from './BackendConfigPanel'
 
 const MAX_HISTORY = 60
 
@@ -82,6 +85,22 @@ export default function Dashboard() {
       <section className="rounded border border-slate-800 p-4">
         <h2 className="mb-3 text-lg font-semibold">Request Flow</h2>
         <RequestFlowViz events={events} backends={healthyBackends} />
+      </section>
+
+      {/* Controls */}
+      <section id="controls-panel" className="rounded border border-slate-800 p-4">
+        <h2 className="mb-3 text-lg font-semibold">Controls</h2>
+        <div className="grid gap-6 md:grid-cols-3">
+          <div>
+            <AlgorithmSelector />
+          </div>
+          <div>
+            <ScenarioPanel />
+          </div>
+          <div>
+            <BackendConfigPanel />
+          </div>
+        </div>
       </section>
     </div>
   )

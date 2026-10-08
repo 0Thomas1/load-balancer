@@ -6,6 +6,10 @@ vi.mock('../hooks/useMetrics', () => ({
   useMetrics: () => mockUseMetrics(),
 }))
 
+vi.mock('./ScenarioPanel', () => ({ ScenarioPanel: () => <div>ScenarioPanel</div> }))
+vi.mock('./AlgorithmSelector', () => ({ AlgorithmSelector: () => <div>AlgorithmSelector</div> }))
+vi.mock('./BackendConfigPanel', () => ({ BackendConfigPanel: () => <div>BackendConfigPanel</div> }))
+
 import Dashboard from './Dashboard'
 
 const b1 = { id: 'b1', name: 'Backend-1', status: 'UP', weight: 1, activeConnections: 0, totalRequests: 10, errorCount: 0, avgLatency: 5.0, circuitState: 'CLOSED' }
