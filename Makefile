@@ -15,3 +15,14 @@ test-frontend:
 
 build-frontend:
 	cd frontend && npm run build
+
+## Run the whole sandbox as one Docker container
+.PHONY: docker-build docker-up docker-down
+docker-build:
+	docker build --platform linux/amd64 -t load-balancer-sandbox:local .
+
+docker-up:
+	docker compose up -d --build
+
+docker-down:
+	docker compose down

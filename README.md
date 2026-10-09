@@ -50,6 +50,25 @@ Then open http://localhost:8080. `WebConfig` activates only when
 the packaged jar from a directory other than the repo root, point it at the build
 output with `--app.frontend-dist=/absolute/path/to/frontend/dist`.
 
+## Run with Docker
+
+The whole sandbox (backend + dashboard) ships as a single image, so Docker is
+all you need — no Maven, Node, or JDK installed:
+
+```bash
+make docker-up     # builds and starts the container
+```
+
+Then open http://localhost:8080. `make docker-down` stops it. The image is
+built and tagged locally (`load-balancer-sandbox:local`); nothing is pushed to
+a registry.
+
+Note: the runtime base (`eclipse-temurin:17-jre-alpine`) is published for
+`linux/amd64` only — JDK 17 Alpine has no arm64 build upstream — so the build
+is pinned to that platform. On Apple Silicon the container runs under Rosetta
+emulation; no action needed. If Adoptium later publishes arm64, the platform
+pins in this plan and the Makefile can simply be dropped.
+
 ## Tests
 
 ```bash
