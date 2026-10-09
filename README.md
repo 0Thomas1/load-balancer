@@ -17,9 +17,15 @@ breakers, and chaos scenarios — not to route production traffic.
 
 ## Prerequisites
 
+Local development:
+
 - JDK 17
 - Node.js 18+ (tested with Node 24)
 - No Maven install needed: the backend ships the Maven Wrapper (`./mvnw`).
+
+Docker-only (see [Run with Docker](#run-with-docker)):
+
+- Docker with Compose v2 — no JDK, Node, or Maven install needed.
 
 ## Quick start (dev)
 
@@ -67,7 +73,7 @@ Note: the runtime base (`eclipse-temurin:17-jre-alpine`) is published for
 `linux/amd64` only — JDK 17 Alpine has no arm64 build upstream — so the build
 is pinned to that platform. On Apple Silicon the container runs under Rosetta
 emulation; no action needed. If Adoptium later publishes arm64, the platform
-pins in this plan and the Makefile can simply be dropped.
+pins in the Makefile and `docker-compose.yml` can simply be dropped.
 
 ## Tests
 
@@ -85,6 +91,9 @@ make test-frontend    # vitest run (frontend)
 | Backend tests    | `make test-backend` |
 | Frontend tests   | `make test-frontend` |
 | Build frontend   | `make build-frontend` |
+| Docker build     | `make docker-build` |
+| Docker up        | `make docker-up` |
+| Docker down      | `make docker-down` |
 
 ## REST API (subset)
 
@@ -142,9 +151,12 @@ Spring Boot 3 backend (simulated, in-memory)
 ## Project layout
 
 ```
-backend/   Spring Boot 3 (Java 17, Maven Wrapper) — engine + REST + WebSocket
-frontend/  React 18 + Vite 5 — dashboard
-docs/      design spec and the task-by-task implementation plan
+backend/            Spring Boot 3 (Java 17, Maven Wrapper) — engine + REST + WebSocket
+frontend/           React 18 + Vite 5 — dashboard
+docs/               design specs and implementation plans
+Dockerfile          multi-stage image build (SPA → jar → JRE runtime)
+docker-compose.yml  one-command local run
+Makefile            dev / test / build / Docker targets
 ```
 
 ## License / scope
