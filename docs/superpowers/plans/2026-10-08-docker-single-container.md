@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - Docker daemon must be running. macOS: launch Docker Desktop (`open -a Docker`) and wait until `docker info` succeeds before any `docker` command.
+- The runtime base `eclipse-temurin:17-jre-alpine` publishes `linux/amd64` only (Adoptium ships no arm64 build for JDK 17 alpine — verified against the Docker Hub registry index). All build/run commands are therefore pinned to `linux/amd64`: `docker build --platform linux/amd64`, compose `platform: linux/amd64`, `docker run --platform linux/amd64`. On arm64 Macs the image runs under Rosetta emulation. If Adoptium later publishes an arm64 build, these pins can be dropped — the Dockerfile itself is unchanged.
 - Builds need outbound network access (npm registry + Maven Central).
 - Host port `8080` must be free for compose; the Task 1 bare smoke test uses host port `8090` instead.
 - Exact image tags: frontend builder `node:22-alpine`, backend builder `maven:3.9-eclipse-temurin-17`, runtime `eclipse-temurin:17-jre-alpine`.
@@ -88,14 +89,14 @@ ENTRYPOINT ["java", "-jar", "app.jar", "--app.frontend-dist=/opt/app/frontend/di
 
 - [ ] **Step 4: Build the image**
 
-Run: `docker build -t load-balancer-sandbox:local .`
-Expected: BUILD SUCCESS; all three stages complete. The `target/*.jar` glob matches only the repackaged boot jar, never the `.jar.original` side artifact.
+Run: `docker build --platform linux/amd64 -t load-balancer-sandbox:local .`
+Expected: BUILD SUCCESS; all three stages complete under `linux/amd64`. The `target/*.jar` glob matches only the repackaged boot jar, never the `.jar.original` side artifact.
 
 - [ ] **Step 5: Start the smoke container and wait for the API**
 
 Run:
 ```bash
-docker run -d --rm --name lb-sandbox-smoke -p 8090:8080 load-balancer-sandbox:local
+docker run -d --rm --platform linux/amd64 --name lb-sandbox-smoke -p 8090:8080 load-balancer-sandbox:local
 for i in $(seq 1 30); do curl -sf http://localhost:8090/api/backends >/dev/null && break; sleep 1; done
 ```
 Expected: the loop exits with `curl` succeeding (Spring Boot answer).
@@ -156,6 +157,7 @@ services:
   app:
     build: .
     image: load-balancer-sandbox:local
+    platform: linux/amd64
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -223,7 +225,7 @@ Tab-indented exactly like the existing targets (`.PHONY` line included in the sa
 ## Run the whole sandbox as one Docker container
 .PHONY: docker-build docker-up docker-down
 docker-build:
-	docker build -t load-balancer-sandbox:local .
+	docker build --platform linux/amd64 -t load-balancer-sandbox:local .
 
 docker-up:
 	docker compose up -d --build
@@ -254,6 +256,12 @@ make docker-up     # builds and starts the container
 Then open http://localhost:8080. `make docker-down` stops it. The image is
 built and tagged locally (`load-balancer-sandbox:local`); nothing is pushed to
 a registry.
+
+Note: the runtime base (`eclipse-temurin:17-jre-alpine`) is published for
+`linux/amd64` only — JDK 17 Alpine has no arm64 build upstream — so the build
+is pinned to that platform. On Apple Silicon the container runs under Rosetta
+emulation; no action needed. If Adoptium later publishes arm64, the platform
+pins in this plan and the Makefile can simply be dropped.
 ````
 
 - [ ] **Step 4: Commit**
